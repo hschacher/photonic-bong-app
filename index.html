@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Photonic Bong Control</title>
+    <style>
+        /* ==========================================
+           1. APP DESIGN & STYLING (Dark Mode)
+           ========================================== */
+        :root {
+            --bg-color: #121212;
+            --card-color: #1e1e1e;
+            --primary-color: #e53935; /* Red accent matching the Bong */
+            --text-main: #ffffff;
+            --text-dim: #aaaaaa;
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background: var(--bg-color); color: var(--text-main); 
+            margin: 0; padding: 20px; 
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .container { width: 100%; max-width: 500px; }
+        
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { font-size: 1.5rem; margin: 0; }
+        
+        .card { background: var(--card-color); padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .card h2 { font-size: 1.2rem; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        
+        input, select { 
+            width: 100%; padding: 12px; margin-bottom: 10px; 
+            border-radius: 8px; border: 1px solid #333; 
+            background: #2a2a2a; color: white; font-size: 1rem; box-sizing: border-box;
+        }
+        button { 
+            width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; 
+            border-radius: 8px; border: none; cursor: pointer; 
+            transition: 0.2s; background: var(--primary-color); color: white;
+        }
+        button:active { opacity: 0.8; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        
+        .btn-row { display: flex; gap: 10px; }
+        .btn-half { flex: 1; }
+        .btn-power-off { background: #ff9800; }
+        
+        .status { text-align: center; font-size: 0.9rem; margin-top: 5px; color: var(--text-dim); }
+        
+        /* Leaderboard Table */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; }
+        th { color: var(--text-dim); font-size: 0.9rem; text-transform: uppercase; }
+        tr:nth-child(1) td { color: gold; font-weight: bold; font-size: 1.2rem; } /* Highlight #1 */
+        tr:nth-child(2) td { color: silver; }
+        tr:nth-child(3) td { color: #cd7f32; } /* Bronze */
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-row">
+        <h1>Photonic Bong</h1>
+        <button id="powerBtn" style="width: auto; padding: 10px 20px; background: #333;" onclick="togglePower()" disabled>🔌 Power Off</button>
+    </div>
+
+    <div class="card">
+        <button id="connectBtn" onclick="connectBluetooth()">Connect via Bluetooth</button>
+        <div id="statusText" class="status">Disconnected</div>
+    </div>
+
+    <div class="card">
+        <h2>Event Manager</h2>
+        <select id="eventSelector" onchange="loadSelectedEvent()"></select>
+        <div class="btn-row">
+            <input type="text" id="newEventName" placeholder="New Event Name..." class="btn-half" style="margin-bottom:0;">
+            <button onclick="createNewEvent()" class="btn-half" style="background: #333;">Create</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Next Participant</h2>
+        <input type="text" id="playerName" placeholder="Enter name before they drink...">
+        <div class="status" style="margin-top:10px;">Waiting for sensor...</div>
+    </div>
+
+    <div class="card">
+        <h2>Leaderboard: <span id="displayEventName"></span></h2>
+        <table>
+            <thead><tr><th>Rank</th><th>Name</th><th>Time (s)</th></tr></thead>
+            <tbody id="leaderboardBody">
+                </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // 1. BLUETOOTH CONSTANTS (Must match ESP32)
+    // ==========================================
+    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+    const TX_CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+    const RX_CHAR_UUID = "8c3b28b4-f6b9-44be-ac90-1c3905e32514";
+
+    let bleDevice = null;
+    let rxCharacteristic = null;
+    let isPoweredOn = true;
+
+    // ==========================================
+    // 2. DATA STORAGE LOGIC (Saves to phone memory)
+    // ==========================================
+    // Database structure: { "Party A": [{name: "Tom", time: 3.5}, ...], "Party B": [] }
+    let appDatabase = JSON.parse(localStorage.getItem('bongDB')) || { "Default Event": [] };
+    let currentEvent = localStorage.getItem('bongCurrentEvent') || "Default Event";
+
+    // Make sure the current event actually exists in the DB
+    if(!appDatabase[currentEvent]) appDatabase[currentEvent] = [];
+
+    // Initialize the UI on page load
+    updateEventDropdown();
+    loadSelectedEvent();
+
+    function saveData() {
+        localStorage.setItem('bongDB', JSON.stringify(appDatabase));
+        localStorage.setItem('bongCurrentEvent', currentEvent);
+    }
+
+    // ==========================================
+    // 3. EVENT MANAGEMENT LOGIC
+    // ==========================================
+    function createNewEvent() {
+        let newName = document.getElementById("newEventName").value.trim();
+        if (newName === "") return;
+        if (appDatabase[newName]) {
+            alert("Event already exists!");
+            return;
+        }
+        appDatabase[newName] = []; // Create empty array for new event
+        currentEvent = newName;
+        document.getElementById("newEventName").value = "";
+        saveData();
+        updateEventDropdown();
+        loadSelectedEvent();
+    }
+
+    function updateEventDropdown() {
+        let selector = document.getElementById("eventSelector");
+        selector.innerHTML = "";
+        for (let eventName in appDatabase) {
+            let option = document.createElement("option");
+            option.value = eventName;
+            option.text = eventName;
+            if (eventName === currentEvent) option.selected = true;
+            selector.appendChild(option);
+        }
+    }
+
+    function loadSelectedEvent() {
+        currentEvent = document.getElementById("eventSelector").value;
+        document.getElementById("displayEventName").innerText = currentEvent;
+        saveData();
+        renderLeaderboard();
+    }
+
+    function renderLeaderboard() {
+        let tbody = document.getElementById("leaderboardBody");
+        tbody.innerHTML = "";
+        
+        let scores = appDatabase[currentEvent];
+        
+        // Sort scores from lowest time to highest time (fastest wins)
+        scores.sort((a, b) => a.time - b.time);
+
+        scores.forEach((entry, index) => {
+            let tr = document.createElement("tr");
+            tr.innerHTML = `<td>#${index + 1}</td><td>${entry.name}</td><td>${entry.time.toFixed(3)}s</td>`;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // ==========================================
+    // 4. BLUETOOTH CONNECTION & DATA HANDLING
+    // ==========================================
+    async function connectBluetooth() {
+        try {
+            document.getElementById('statusText').innerText = "Searching...";
+            bleDevice = await navigator.bluetooth.requestDevice({
+                filters: [{ name: 'PhotonicBong' }],
+                optionalServices: [SERVICE_UUID]
+            });
+
+            document.getElementById('statusText').innerText = "Connecting...";
+            const server = await bleDevice.gatt.connect();
+            const service = await server.getPrimaryService(SERVICE_UUID);
+
+            const txCharacteristic = await service.getCharacteristic(TX_CHAR_UUID);
+            rxCharacteristic = await service.getCharacteristic(RX_CHAR_UUID);
+
+            // Listen for incoming data
+            await txCharacteristic.startNotifications();
+            txCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
+
+            // Update UI
+            document.getElementById('statusText').innerText = "🟢 Connected!";
+            document.getElementById('statusText').style.color = "#03dac6";
+            document.getElementById('connectBtn').style.display = "none";
+            document.getElementById('powerBtn').disabled = false;
+
+            bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+        } catch (error) {
+            document.getElementById('statusText').innerText = "Failed: " + error;
+        }
+    }
+
+    function handleIncomingData(event) {
+        let value = event.target.value;
+        let dataString = new TextDecoder('utf-8').decode(value);
+        
+        // We expect: "DATA,3.500"
+        if(dataString.startsWith("DATA,")) {
+            let timeStr = dataString.split(",")[1];
+            let finalTime = parseFloat(timeStr);
+
+            // Get the name, or use Anonymous
+            let inputName = document.getElementById("playerName").value.trim();
+            let playerName = inputName !== "" ? inputName : "Anonymous";
+
+            // Add to database
+            appDatabase[currentEvent].push({ name: playerName, time: finalTime });
+            saveData();
+            renderLeaderboard();
+
+            // Clear name input for the next person
+            document.getElementById("playerName").value = "";
+        }
+    }
+
+    // ==========================================
+    // 5. HARDWARE CONTROL (Power On/Off)
+    // ==========================================
+    async function togglePower() {
+        if (!rxCharacteristic) return;
+        let btn = document.getElementById("powerBtn");
+        let encoder = new TextEncoder('utf-8');
+        
+        try {
+            if (isPoweredOn) {
+                await rxCharacteristic.writeValue(encoder.encode("POWER_OFF"));
+                isPoweredOn = false;
+                btn.innerText = "⚡ Power On";
+                btn.style.background = "var(--primary-color)";
+            } else {
+                await rxCharacteristic.writeValue(encoder.encode("POWER_ON"));
+                isPoweredOn = true;
+                btn.innerText = "🔌 Power Off";
+                btn.style.background = "#333";
+            }
+        } catch (err) {
+            console.error("Failed to send power command", err);
+        }
+    }
+
+    function onDisconnected() {
+        document.getElementById('statusText').innerText = "🔴 Disconnected";
+        document.getElementById('statusText').style.color = "var(--primary-color)";
+        document.getElementById('connectBtn').style.display = "block";
+        document.getElementById('powerBtn').disabled = true;
+    }
+</script>
+
+</body>
+</html>
