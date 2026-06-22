@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Photonic Bong - Arcade</title>
+    <style>
+        /* ==========================================
+           1. GAMIFIED ARCADE DESIGN (Neon Dark Mode)
+           ========================================== */
+        :root {
+            --bg-color: #090a0f;
+            --card-color: #161925;
+            --primary-neon: #ff2a5f;   /* Laser Red */
+            --secondary-neon: #00f0ff; /* Cyber Blue */
+            --text-main: #ffffff;
+            --text-dim: #6c758f;
+        }
+        body { 
+            font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background: var(--bg-color); color: var(--text-main); 
+            margin: 0; padding: 15px; 
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .container { width: 100%; max-width: 500px; padding-bottom: 50px; }
+        
+        /* Header & Hardware Controls */
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; background: #000; padding: 10px 15px; border-radius: 12px; border: 1px solid #333;}
+        h1 { font-size: 1.2rem; margin: 0; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 2px;}
+        
+        .status-dot { height: 10px; width: 10px; background-color: red; border-radius: 50%; box-shadow: 0 0 8px red;}
+        .connected-dot { background-color: #0f0; box-shadow: 0 0 8px #0f0; }
+        
+        #powerBtn { background: #222; color: #fff; padding: 8px 12px; font-size: 0.8rem; border-radius: 6px; width: auto; font-weight: bold; border: none;}
+        .power-on { color: #0f0 !important; }
+        .power-off { color: red !important; }
+
+        /* Cards & Containers */
+        .card { background: var(--card-color); padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); border: 1px solid #232736;}
+        .card-title { font-size: 0.85rem; color: var(--secondary-neon); text-transform: uppercase; margin: 0 0 10px 0; letter-spacing: 2px; font-weight: 800;}
+        
+        /* The "Next Player" Arena Card */
+        .arena-card { border: 2px solid var(--primary-neon); box-shadow: 0 0 15px rgba(255, 42, 95, 0.2); position: relative; overflow: hidden; }
+        
+        /* Inputs & Buttons */
+        input, select { 
+            width: 100%; padding: 16px; margin-bottom: 10px; 
+            border-radius: 12px; border: 2px solid #2d3142; 
+            background: #0d0f16; color: white; font-size: 1.1rem; box-sizing: border-box; font-weight: bold;
+        }
+        select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2300f0ff%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E"); background-repeat: no-repeat; background-position: right 15px top 50%; background-size: 15px auto; }
+        input:focus, select:focus { outline: none; border-color: var(--secondary-neon); }
+
+        button { 
+            width: 100%; padding: 16px; font-size: 1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
+            border-radius: 12px; border: none; cursor: pointer; transition: 0.1s; color: white;
+        }
+        button:active { transform: scale(0.97); }
+        .btn-primary { background: var(--primary-neon); box-shadow: 0 4px 15px rgba(255, 42, 95, 0.4); }
+        .btn-secondary { background: #2d3142; }
+        .btn-connect { background: var(--secondary-neon); color: #000; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0, 240, 255, 0.3); }
+
+        .flex-row { display: flex; gap: 10px; align-items: center; }
+        .flex-row > * { margin-bottom: 0 !important; }
+
+        /* Leaderboard */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 14px 8px; text-align: left; border-bottom: 1px solid #232736; }
+        th { color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
+        tr { cursor: pointer; transition: 0.2s; }
+        tr:hover { background: #1e2233; }
+        td:nth-child(3) { font-family: monospace; font-size: 1.1rem; font-weight: bold;} /* Monospace for numbers */
+
+        /* Modals & Overlays */
+        .hidden { display: none !important; }
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+            display: flex; justify-content: center; align-items: center; z-index: 100; padding: 20px; box-sizing: border-box;
+        }
+        .modal-content { background: var(--card-color); padding: 25px; border-radius: 20px; width: 100%; max-width: 450px; border: 1px solid #333; max-height: 85vh; overflow-y: auto;}
+        
+        /* Event Stat Cards (Inside Overview) */
+        .stat-card { background: #0d0f16; border: 1px solid #232736; border-radius: 12px; padding: 15px; margin-bottom: 15px; }
+        .stat-card h3 { margin: 0 0 10px 0; font-size: 1.1rem; color: var(--secondary-neon); }
+        .stat-grid { display: flex; justify-content: space-between; font-size: 0.9rem; color: #aaa; margin-bottom: 15px; }
+        .stat-grid span { font-weight: bold; color: white; font-family: monospace; font-size: 1.1rem;}
+        .btn-delete { background: #ff2a5f22; color: var(--primary-neon); border: 1px solid var(--primary-neon); padding: 10px; border-radius: 8px; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="top-bar">
+        <h1><span id="btDot" class="status-dot"></span> Bong</h1>
+        <button id="powerBtn" class="power-on" onclick="togglePower()" disabled>ON</button>
+    </div>
+
+    <button id="connectBtn" class="btn-connect" onclick="connectBluetooth()">🔌 Connect to Bong</button>
+
+    <div class="card">
+        <h2 class="card-title">Currently Playing</h2>
+        <select id="mainEventSelector" onchange="loadSelectedEvent()"></select>
+        <button class="btn-secondary" style="margin-top: 10px; padding: 12px; font-size: 0.85rem;" onclick="openOverviewModal()">⚙️ Manage All Events & Stats</button>
+    </div>
+
+    <div class="card arena-card">
+        <h2 class="card-title" style="color: var(--primary-neon);">⚡ Next Up To Drink</h2>
+        <input type="text" id="playerName" placeholder="Enter player name..." autocomplete="off">
+        <div style="text-align: center; color: var(--text-dim); font-size: 0.8rem; margin-top: 5px;">Waiting for fluid sensor trigger...</div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-title">🏆 High Scores</h2>
+        <table>
+            <thead><tr><th>Rank</th><th>Player</th><th>Time (s)</th></tr></thead>
+            <tbody id="leaderboardBody">
+                </tbody>
+        </table>
+        <p style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">Tap any score to edit or delete.</p>
+    </div>
+</div>
+
+<div id="overviewModal" class="hidden modal-overlay">
+    <div class="modal-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; color: white;">Event Dashboard</h2>
+            <button class="btn-secondary" style="width: auto; padding: 8px 12px;" onclick="closeOverviewModal()">Close</button>
+        </div>
+
+        <button class="btn-primary" style="margin-bottom: 20px;" onclick="toggleNewEventUI()">+ Create New Event</button>
+        
+        <div id="newEventUI" class="hidden stat-card" style="border-color: var(--primary-neon);">
+            <input type="text" id="newEventName" placeholder="Name of new party...">
+            <button class="btn-connect" onclick="createNewEvent()">Save Event</button>
+        </div>
+
+        <div id="eventListContainer">
+            </div>
+    </div>
+</div>
+
+<div id="editModal" class="hidden modal-overlay">
+    <div class="modal-content">
+        <h2 style="margin-top: 0;">Edit Score</h2>
+        <label style="font-size: 0.85rem; color: var(--text-dim);">Player Name:</label>
+        <input type="text" id="editNameInput">
+        <label style="font-size: 0.85rem; color: var(--text-dim);">Move to Event:</label>
+        <select id="editEventSelector"></select>
+
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+            <button class="btn-connect" onclick="saveEdit()">Save Changes</button>
+            <button class="btn-delete" style="border: none; background: #ff2a5f; color: white;" onclick="deleteRecord()">🗑️ Delete Score</button>
+            <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // 1. BLUETOOTH CONFIG
+    // ==========================================
+    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+    const TX_CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+    const RX_CHAR_UUID = "8c3b28b4-f6b9-44be-ac90-1c3905e32514";
+
+    let bleDevice = null;
+    let rxCharacteristic = null;
+    let isPoweredOn = true; 
+
+    // ==========================================
+    // 2. DATA STORAGE
+    // ==========================================
+    let appDatabase = JSON.parse(localStorage.getItem('bongDB')) || { "Default Event": [] };
+    let currentEvent = localStorage.getItem('bongCurrentEvent') || "Default Event";
+
+    if(!appDatabase[currentEvent]) appDatabase[currentEvent] = [];
+
+    // Ensure IDs exist for editing
+    for (let evt in appDatabase) {
+        appDatabase[evt].forEach(record => {
+            if (!record.id) record.id = Math.random().toString(36).substr(2, 9);
+        });
+    }
+    saveData();
+
+    // Initialize View
+    updateEventDropdowns();
+    loadSelectedEvent();
+
+    function saveData() {
+        localStorage.setItem('bongDB', JSON.stringify(appDatabase));
+        localStorage.setItem('bongCurrentEvent', currentEvent);
+    }
+
+    // ==========================================
+    // 3. UI: MAIN DASHBOARD & LEADERBOARD
+    // ==========================================
+    function updateEventDropdowns() {
+        let mainSelector = document.getElementById("mainEventSelector");
+        let editSelector = document.getElementById("editEventSelector");
+        mainSelector.innerHTML = "";
+        editSelector.innerHTML = "";
+
+        for (let eventName in appDatabase) {
+            mainSelector.add(new Option(eventName, eventName, false, eventName === currentEvent));
+            editSelector.add(new Option(eventName, eventName));
+        }
+    }
+
+    function loadSelectedEvent() {
+        currentEvent = document.getElementById("mainEventSelector").value;
+        saveData();
+        renderLeaderboard();
+    }
+
+    function renderLeaderboard() {
+        let tbody = document.getElementById("leaderboardBody");
+        tbody.innerHTML = "";
+        
+        let scores = appDatabase[currentEvent];
+        scores.sort((a, b) => a.time - b.time); 
+
+        scores.forEach((entry, index) => {
+            let tr = document.createElement("tr");
+            tr.onclick = () => openEditModal(currentEvent, entry.id);
+            
+            // Assign Medals
+            let rankDisplay = `#${index + 1}`;
+            if(index === 0) rankDisplay = "🥇 1st";
+            if(index === 1) rankDisplay = "🥈 2nd";
+            if(index === 2) rankDisplay = "🥉 3rd";
+
+            tr.innerHTML = `<td>${rankDisplay}</td><td><strong>${entry.name}</strong></td><td>${entry.time.toFixed(3)}s</td>`;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // ==========================================
+    // 4. UI: EVENT OVERVIEW MODAL (New Features)
+    // ==========================================
+    function openOverviewModal() {
+        renderOverviewList();
+        document.getElementById("overviewModal").classList.remove("hidden");
+    }
+    function closeOverviewModal() {
+        document.getElementById("overviewModal").classList.add("hidden");
+        document.getElementById("newEventUI").classList.add("hidden");
+    }
+    function toggleNewEventUI() {
+        document.getElementById("newEventUI").classList.toggle("hidden");
+    }
+
+    function createNewEvent() {
+        let newName = document.getElementById("newEventName").value.trim();
+        if (newName === "") return;
+        if (appDatabase[newName]) { alert("Event already exists!"); return; }
+        
+        appDatabase[newName] = [];
+        currentEvent = newName; // Auto-switch to new event
+        document.getElementById("newEventName").value = "";
+        
+        saveData();
+        updateEventDropdowns();
+        loadSelectedEvent();
+        toggleNewEventUI();
+        renderOverviewList(); // Refresh the list
+    }
+
+    function renderOverviewList() {
+        let container = document.getElementById("eventListContainer");
+        container.innerHTML = "";
+
+        for(let evtName in appDatabase) {
+            let runs = appDatabase[evtName].length;
+            
+            // Calculate Average Time
+            let totalSeconds = appDatabase[evtName].reduce((sum, record) => sum + record.time, 0);
+            let avgTime = runs > 0 ? (totalSeconds / runs).toFixed(2) : "0.00";
+
+            // Visual Highlight if it's the currently active event
+            let isCurrent = evtName === currentEvent ? 'style="border-color: var(--secondary-neon);"' : '';
+
+            container.innerHTML += `
+                <div class="stat-card" ${isCurrent}>
+                    <h3>${evtName} ${evtName === currentEvent ? '(Active)' : ''}</h3>
+                    <div class="stat-grid">
+                        <div>Uses: <span>${runs}</span></div>
+                        <div>Avg Time: <span>${avgTime}s</span></div>
+                    </div>
+                    <button class="btn-delete" onclick="deleteEntireEvent('${evtName}')">🗑️ Delete Entire Event</button>
+                </div>
+            `;
+        }
+    }
+
+    function deleteEntireEvent(evtName) {
+        if(confirm(`⚠️ WARNING!\n\nAre you absolutely sure you want to delete the event "${evtName}"? \n\nThis will permanently erase all ${appDatabase[evtName].length} scores associated with it. This cannot be undone.`)) {
+            
+            delete appDatabase[evtName];
+
+            // Failsafe: Ensure at least one event exists
+            if(Object.keys(appDatabase).length === 0) {
+                appDatabase["Default Event"] = [];
+            }
+
+            // If we deleted the active event, fall back to the first available one
+            if(currentEvent === evtName) {
+                currentEvent = Object.keys(appDatabase)[0];
+            }
+
+            saveData();
+            updateEventDropdowns();
+            loadSelectedEvent();
+            renderOverviewList();
+        }
+    }
+
+    // ==========================================
+    // 5. UI: EDIT RECORD MODAL
+    // ==========================================
+    let editingEvent = "";
+    let editingRecordId = "";
+
+    function openEditModal(eventName, recordId) {
+        editingEvent = eventName;
+        editingRecordId = recordId;
+        let record = appDatabase[eventName].find(r => r.id === recordId);
+        if(!record) return;
+
+        document.getElementById("editNameInput").value = record.name;
+        document.getElementById("editEventSelector").value = eventName;
+        document.getElementById("editModal").classList.remove("hidden");
+    }
+
+    function closeEditModal() { document.getElementById("editModal").classList.add("hidden"); }
+
+    function saveEdit() {
+        let newName = document.getElementById("editNameInput").value.trim() || "Anonymous";
+        let targetEvent = document.getElementById("editEventSelector").value;
+        let recordIndex = appDatabase[editingEvent].findIndex(r => r.id === editingRecordId);
+        
+        if (recordIndex > -1) {
+            let record = appDatabase[editingEvent][recordIndex];
+            record.name = newName; 
+            if (editingEvent !== targetEvent) {
+                appDatabase[editingEvent].splice(recordIndex, 1); 
+                appDatabase[targetEvent].push(record); 
+            }
+        }
+        saveData();
+        renderLeaderboard();
+        closeEditModal();
+    }
+
+    function deleteRecord() {
+        if(!confirm("Delete this score forever?")) return;
+        let recordIndex = appDatabase[editingEvent].findIndex(r => r.id === editingRecordId);
+        if (recordIndex > -1) appDatabase[editingEvent].splice(recordIndex, 1);
+        saveData();
+        renderLeaderboard();
+        closeEditModal();
+    }
+
+    // ==========================================
+    // 6. BLUETOOTH & HARDWARE COMM
+    // ==========================================
+    async function connectBluetooth() {
+        try {
+            document.getElementById('connectBtn').innerText = "Searching...";
+            bleDevice = await navigator.bluetooth.requestDevice({
+                filters: [{ name: 'PhotonicBong' }],
+                optionalServices: [SERVICE_UUID]
+            });
+            const server = await bleDevice.gatt.connect();
+            const service = await server.getPrimaryService(SERVICE_UUID);
+            const txCharacteristic = await service.getCharacteristic(TX_CHAR_UUID);
+            rxCharacteristic = await service.getCharacteristic(RX_CHAR_UUID);
+
+            await txCharacteristic.startNotifications();
+            txCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
+
+            document.getElementById('btDot').classList.add('connected-dot');
+            document.getElementById('connectBtn').style.display = "none";
+            document.getElementById('powerBtn').disabled = false;
+            bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+        } catch (error) {
+            document.getElementById('connectBtn').innerText = "🔌 Connect to Bong";
+        }
+    }
+
+    function handleIncomingData(event) {
+        let dataString = new TextDecoder('utf-8').decode(event.target.value);
+        if(dataString.startsWith("DATA,")) {
+            let finalTime = parseFloat(dataString.split(",")[1]);
+            let playerName = document.getElementById("playerName").value.trim() || "Anonymous";
+
+            appDatabase[currentEvent].push({ 
+                id: Math.random().toString(36).substr(2, 9), 
+                name: playerName, 
+                time: finalTime 
+            });
+
+            saveData();
+            renderLeaderboard();
+            document.getElementById("playerName").value = ""; 
+        }
+    }
+
+    async function togglePower() {
+        if (!rxCharacteristic) return;
+        let btn = document.getElementById("powerBtn");
+        let encoder = new TextEncoder('utf-8');
+        try {
+            if (isPoweredOn) {
+                await rxCharacteristic.writeValue(encoder.encode("POWER_OFF"));
+                isPoweredOn = false;
+                btn.innerText = "OFF";
+                btn.className = "power-off";
+            } else {
+                await rxCharacteristic.writeValue(encoder.encode("POWER_ON"));
+                isPoweredOn = true;
+                btn.innerText = "ON";
+                btn.className = "power-on";
+            }
+        } catch (err) {}
+    }
+
+    function onDisconnected() {
+        document.getElementById('btDot').classList.remove('connected-dot');
+        document.getElementById('connectBtn').style.display = "block";
+        document.getElementById('connectBtn').innerText = "🔌 Reconnect Bong";
+        document.getElementById('powerBtn').disabled = true;
+    }
+</script>
+</body>
+</html>
